@@ -354,7 +354,12 @@ function showDownloadPage_(token) {
   return renderDownloadPage_('ok', {
     fileName: record.fileName,
     token: token,
-    expiresAt: formatDateTime_(record.expiresAt)
+    expiresAt: formatDateTime_(record.expiresAt),
+    // GAS の Web アプリは script.googleusercontent.com 上の iframe 経由で配信されるため、
+    // ダウンロードリンクを相対URL(例: "?token=...")のままにすると、<base target="_top">で
+    // トップフレームへ遷移させても遷移先が iframe 側のオリジンを基準に解決されてしまい、
+    // 本来の doGet(exec URL)に届かずダウンロードが失敗する。そのため常に絶対URLを渡す。
+    webAppUrl: ScriptApp.getService().getUrl()
   });
 }
 
