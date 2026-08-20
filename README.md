@@ -15,7 +15,7 @@
 このアプリは「リンクを知っていれば誰でもダウンロード可」ですが、**アップロードは匿名の第三者が無制限に行えないよう Cloudflare Turnstile による検証を必須化**しています。未設定のままデプロイすると、アップロード画面に警告が表示され、アップロード自体ができません(フェイルクローズ)。
 
 1. [Cloudflare ダッシュボード](https://dash.cloudflare.com/?to=/:account/turnstile) にアクセスし(無料アカウントで可)、「Turnstile」→「サイトを追加」
-2. ウィジェットモードは「Managed」を推奨。ドメインはデプロイ後の `script.google.com` のURLを想定していますが、Apps Script の Web アプリURLはCloudflare側のドメイン検証に引っかかる場合があるため、ドメイン欄は空欄または `script.google.com` を登録してください
+2. ウィジェットモードは「Managed」を推奨。ドメイン欄はiframeで埋め込まれている `n-XXXXXXXXXXXXXXXXXXXXXXXX.script.googleusercontent.com` のようなドメインを登録してください
 3. 発行された **サイトキー** と **シークレットキー** を控える
 4. Apps Script エディタで 左メニュー「プロジェクトの設定」(歯車アイコン)→ 一番下の「スクリプト プロパティ」→「スクリプト プロパティを追加」で以下を登録
    | プロパティ名 | 値 |
