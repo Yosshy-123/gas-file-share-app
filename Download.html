@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root {
+      --bg-grad-1: #6366f1;
+      --bg-grad-2: #8b5cf6;
+      --card-bg: #ffffff;
+      --text-main: #1e1b2e;
+      --text-sub: #6b7280;
+      --accent: #6366f1;
+      --accent-dark: #4f46e5;
+      --radius: 16px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Kaku Gothic ProN',
+                   'Segoe UI', 'Yu Gothic', sans-serif;
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      background: linear-gradient(135deg, var(--bg-grad-1), var(--bg-grad-2));
+      color: var(--text-main);
+    }
+    .wrap { width: 100%; max-width: 400px; }
+    .card {
+      background: var(--card-bg);
+      border-radius: var(--radius);
+      padding: 40px 28px;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.18);
+      text-align: center;
+    }
+    .icon-circle {
+      width: 64px; height: 64px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      margin: 0 auto 18px;
+    }
+    .icon-circle svg { width: 28px; height: 28px; }
+    .icon-circle.ok { background: #eef2ff; color: var(--accent); }
+    .icon-circle.warn { background: #fff7ed; color: #d97706; }
+    .icon-circle.error { background: #fef2f2; color: #dc2626; }
+
+    h1 { font-size: 17px; font-weight: 700; margin: 0 0 6px; word-break: break-word; }
+    .hint { font-size: 13px; color: var(--text-sub); margin: 0 0 24px; line-height: 1.6; }
+
+    a.download-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 28px;
+      background: var(--accent);
+      color: #fff;
+      text-decoration: none;
+      border-radius: 10px;
+      font-size: 15px;
+      font-weight: 700;
+      transition: background 0.15s;
+    }
+    a.download-btn:hover { background: var(--accent-dark); }
+    a.download-btn svg { width: 16px; height: 16px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <? if (status === 'ok') { ?>
+        <div class="icon-circle ok">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M14 3H7C5.89543 3 5 3.89543 5 5V19C5 20.1046 5.89543 21 7 21H17C18.1046 21 19 20.1046 19 19V8L14 3Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M14 3V8H19" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <h1><?= fileName ?></h1>
+        <p class="hint">有効期限: <?= expiresAt ?> まで</p>
+        <a class="download-btn" href="?token=<?= token ?>&action=download">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 4V16M12 16L7 11M12 16L17 11" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M5 20H19" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          ダウンロード
+        </a>
+
+      <? } else if (status === 'expired') { ?>
+        <div class="icon-circle warn">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/>
+            <path d="M12 7V12L15.5 14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <h1>リンクの有効期限が切れています</h1>
+        <p class="hint">このファイルは有効期限を過ぎたため、既に削除されているか、まもなく削除されます。</p>
+
+      <? } else { ?>
+        <div class="icon-circle error">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 9V13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            <path d="M12 17H12.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            <path d="M10.29 3.86L1.82 18A2 2 0 0 0 3.55 21H20.45A2 2 0 0 0 22.18 18L13.71 3.86A2 2 0 0 0 10.29 3.86Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <h1>リンクが無効です</h1>
+        <p class="hint">URLが正しいか確認してください。</p>
+      <? } ?>
+    </div>
+  </div>
+</body>
+</html>

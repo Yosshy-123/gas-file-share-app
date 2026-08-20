@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+  <style>
+    :root {
+      --bg-grad-1: #6366f1;
+      --bg-grad-2: #8b5cf6;
+      --card-bg: #ffffff;
+      --text-main: #1e1b2e;
+      --text-sub: #6b7280;
+      --border: #e5e7eb;
+      --accent: #6366f1;
+      --accent-dark: #4f46e5;
+      --success-bg: #f0fdf4;
+      --success-border: #86efac;
+      --success-text: #166534;
+      --error-text: #dc2626;
+      --radius: 16px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Kaku Gothic ProN',
+                   'Segoe UI', 'Yu Gothic', sans-serif;
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      background: linear-gradient(135deg, var(--bg-grad-1), var(--bg-grad-2));
+      color: var(--text-main);
+    }
+    .wrap { width: 100%; max-width: 440px; }
+    .header { text-align: center; margin-bottom: 20px; color: #fff; }
+    .header h1 { font-size: 22px; font-weight: 700; margin: 0 0 6px; letter-spacing: -0.02em; }
+    .header p { font-size: 13px; margin: 0; opacity: 0.85; }
+
+    .card {
+      background: var(--card-bg);
+      border-radius: var(--radius);
+      padding: 28px;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.18);
+    }
+
+    .config-warning {
+      margin-bottom: 16px;
+      padding: 10px 12px;
+      background: #fffbeb;
+      border: 1px solid #fde68a;
+      border-radius: 8px;
+      color: #92400e;
+      font-size: 12.5px;
+      line-height: 1.5;
+    }
+
+    .dropzone {
+      border: 2px dashed #c7c9f5;
+      border-radius: 12px;
+      padding: 28px 16px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+      background: #f7f7ff;
+    }
+    .dropzone.dragover { border-color: var(--accent); background: #edecff; }
+    .dropzone .icon { margin-bottom: 8px; color: var(--accent); }
+    .dropzone .icon svg { width: 28px; height: 28px; display: block; margin: 0 auto; }
+    .dropzone .main-text { font-size: 14px; font-weight: 600; color: var(--text-main); }
+    .dropzone .sub-text { font-size: 12px; color: var(--text-sub); margin-top: 4px; }
+    .dropzone input[type="file"] { display: none; }
+
+    .file-chip {
+      display: none;
+      align-items: center;
+      gap: 10px;
+      margin-top: 14px;
+      padding: 10px 12px;
+      background: #f3f4f6;
+      border-radius: 10px;
+      font-size: 13px;
+    }
+    .file-chip .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+    .file-chip .size { color: var(--text-sub); font-size: 12px; flex-shrink: 0; }
+    .file-chip .remove { cursor: pointer; color: var(--text-sub); flex-shrink: 0; display: flex; align-items: center; }
+    .file-chip .remove svg { width: 14px; height: 14px; }
+
+    label.field-label {
+      display: block;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-sub);
+      margin: 20px 0 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+
+    select {
+      width: 100%;
+      padding: 11px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      font-size: 14px;
+      background: #fff;
+      color: var(--text-main);
+      appearance: none;
+      -webkit-appearance: none;
+      background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6'><path d='M0 0l5 6 5-6z' fill='%236b7280'/></svg>");
+      background-repeat: no-repeat;
+      background-position: right 14px center;
+    }
+    select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(99,102,241,0.15); }
+
+    .turnstile-wrap {
+      margin-top: 20px;
+      display: flex;
+      justify-content: center;
+    }
+
+    button.upload-btn {
+      margin-top: 20px;
+      width: 100%;
+      padding: 13px;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.15s, transform 0.1s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    button.upload-btn:hover:not(:disabled) { background: var(--accent-dark); }
+    button.upload-btn:active:not(:disabled) { transform: scale(0.98); }
+    button.upload-btn:disabled { background: #c7c9f5; cursor: default; }
+
+    .spinner {
+      width: 15px; height: 15px;
+      border: 2px solid rgba(255,255,255,0.4);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      display: none;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .error-msg {
+      display: none;
+      margin-top: 12px;
+      padding: 10px 12px;
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      border-radius: 8px;
+      color: var(--error-text);
+      font-size: 13px;
+    }
+
+    .result {
+      display: none;
+      margin-top: 20px;
+      padding: 18px;
+      background: var(--success-bg);
+      border: 1px solid var(--success-border);
+      border-radius: 12px;
+      animation: fadeIn 0.3s ease;
+    }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+    .result .label { font-size: 12px; font-weight: 700; color: var(--success-text); text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 8px; }
+    .result .url-box {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: #fff;
+      border: 1px solid var(--success-border);
+      border-radius: 8px;
+      padding: 8px 10px;
+    }
+    .result .url-box a {
+      flex: 1;
+      font-size: 12.5px;
+      color: var(--accent-dark);
+      text-decoration: none;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .result .copy-btn {
+      flex-shrink: 0;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .result .expiry { margin-top: 10px; font-size: 12px; color: var(--success-text); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="header">
+      <h1>ファイル共有</h1>
+      <p>アップロードすると期限付きの共有URLを発行します</p>
+    </div>
+
+    <div class="card">
+      <? if (!turnstileConfigured) { ?>
+        <div class="config-warning">
+          ⚠️ Turnstileが未設定のため、このデプロイではアップロードが無効化されています。管理者は Script Properties に
+          <code>TURNSTILE_SITE_KEY</code> / <code>TURNSTILE_SECRET_KEY</code> を設定してください(README参照)。
+        </div>
+      <? } ?>
+
+      <div class="dropzone" id="dropzone" data-max-size-mb="<?= maxSizeMB ?>">
+        <div class="icon">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 15V4M12 4L8 8M12 4L16 8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M4 15V17.8C4 18.9201 4 19.4802 4.21799 19.908C4.40973 20.2843 4.71569 20.5903 5.09202 20.782C5.51984 21 6.07989 21 7.2 21H16.8C17.9201 21 18.4802 21 18.908 20.782C19.2843 20.5903 19.5903 20.2843 19.782 19.908C20 19.4802 20 18.9201 20 17.8V15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div class="main-text">クリックまたはドラッグ&ドロップ</div>
+        <div class="sub-text">1ファイルのみ・上限 <?= maxSizeMB ?>MB</div>
+        <input type="file" id="fileInput">
+      </div>
+
+      <div class="file-chip" id="fileChip">
+        <span class="name" id="fileChipName"></span>
+        <span class="size" id="fileChipSize"></span>
+        <span class="remove" id="fileChipRemove" title="削除">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+      </div>
+
+      <label class="field-label">有効期限</label>
+      <select id="expirySelect">
+        <? for (var i = 0; i < expiryOptions.length; i++) { ?>
+          <option value="<?= expiryOptions[i] ?>" <?= expiryOptions[i] === defaultExpiry ? 'selected' : '' ?>>
+            <?= (expiryOptions[i] < 24) ? expiryOptions[i] + '時間' : (expiryOptions[i] / 24) + '日' ?>
+          </option>
+        <? } ?>
+      </select>
+
+      <? if (turnstileConfigured) { ?>
+        <div class="turnstile-wrap">
+          <div class="cf-turnstile" id="turnstileWidget" data-sitekey="<?= turnstileSiteKey ?>" data-callback="__onTurnstileSuccess" data-expired-callback="__onTurnstileExpired"></div>
+        </div>
+      <? } ?>
+
+      <button class="upload-btn" id="uploadBtn" disabled>
+        <span class="spinner" id="spinner"></span>
+        <span id="uploadBtnText">アップロード</span>
+      </button>
+
+      <div class="error-msg" id="errorMsg"></div>
+
+      <div class="result" id="result">
+        <div class="label">共有URLを発行しました</div>
+        <div class="url-box">
+          <a id="resultUrl" href="#" target="_blank"></a>
+          <button class="copy-btn" id="copyBtn">コピー</button>
+        </div>
+        <div class="expiry">有効期限: <span id="resultExpiry"></span></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      var dropzone = document.getElementById('dropzone');
+      var fileInput = document.getElementById('fileInput');
+      var fileChip = document.getElementById('fileChip');
+      var fileChipName = document.getElementById('fileChipName');
+      var fileChipSize = document.getElementById('fileChipSize');
+      var fileChipRemove = document.getElementById('fileChipRemove');
+      var expirySelect = document.getElementById('expirySelect');
+      var uploadBtn = document.getElementById('uploadBtn');
+      var uploadBtnText = document.getElementById('uploadBtnText');
+      var spinner = document.getElementById('spinner');
+      var errorMsg = document.getElementById('errorMsg');
+      var result = document.getElementById('result');
+      var resultUrl = document.getElementById('resultUrl');
+      var resultExpiry = document.getElementById('resultExpiry');
+      var copyBtn = document.getElementById('copyBtn');
+
+      var MAX_SIZE_MB = parseFloat(dropzone.getAttribute('data-max-size-mb'));
+      var selectedFile = null;
+      var turnstileVerified = false;
+
+      // Turnstileウィジェットの成否コールバック(data-callback属性からグローバル関数として呼ばれる)
+      window.__onTurnstileSuccess = function () {
+        turnstileVerified = true;
+        updateUploadButtonState();
+      };
+      window.__onTurnstileExpired = function () {
+        turnstileVerified = false;
+        updateUploadButtonState();
+      };
+
+      function updateUploadButtonState() {
+        uploadBtn.disabled = !(turnstileVerified && selectedFile);
+      }
+
+      function formatSize(bytes) {
+        if (bytes < 1024) return bytes + ' B';
+        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+        return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+      }
+
+      function showError(msg) {
+        errorMsg.textContent = msg;
+        errorMsg.style.display = 'block';
+      }
+      function hideError() {
+        errorMsg.style.display = 'none';
+      }
+
+      function setFile(file) {
+        if (!file) return;
+        if (file.size > MAX_SIZE_MB * 1024 * 1024) {
+          showError('ファイルサイズが上限(' + MAX_SIZE_MB + 'MB)を超えています。');
+          return;
+        }
+        hideError();
+        selectedFile = file;
+        fileChipName.textContent = file.name;
+        fileChipSize.textContent = formatSize(file.size);
+        fileChip.style.display = 'flex';
+        result.style.display = 'none';
+        updateUploadButtonState();
+      }
+
+      dropzone.addEventListener('click', function () { fileInput.click(); });
+      fileInput.addEventListener('change', function () { setFile(fileInput.files[0]); });
+
+      ['dragover', 'dragenter'].forEach(function (evt) {
+        dropzone.addEventListener(evt, function (e) {
+          e.preventDefault();
+          dropzone.classList.add('dragover');
+        });
+      });
+      ['dragleave', 'drop'].forEach(function (evt) {
+        dropzone.addEventListener(evt, function (e) {
+          e.preventDefault();
+          dropzone.classList.remove('dragover');
+        });
+      });
+      dropzone.addEventListener('drop', function (e) {
+        var files = e.dataTransfer.files;
+        if (files.length > 1) {
+          showError('ファイルは1つだけ選択できます。');
+          return;
+        }
+        setFile(files[0]);
+      });
+
+      fileChipRemove.addEventListener('click', function (e) {
+        e.stopPropagation();
+        selectedFile = null;
+        fileInput.value = '';
+        fileChip.style.display = 'none';
+        updateUploadButtonState();
+      });
+
+      uploadBtn.addEventListener('click', function () {
+        hideError();
+        if (!selectedFile) {
+          showError('ファイルを選択してください。');
+          return;
+        }
+        if (!turnstileVerified || typeof turnstile === 'undefined') {
+          showError('ロボットではないことの確認を完了してください。');
+          return;
+        }
+        var turnstileToken = turnstile.getResponse();
+        if (!turnstileToken) {
+          showError('ロボットではないことの確認を完了してください。');
+          return;
+        }
+
+        uploadBtn.disabled = true;
+        spinner.style.display = 'inline-block';
+        uploadBtnText.textContent = 'アップロード中...';
+
+        var reader = new FileReader();
+        reader.onload = function (e) {
+          google.script.run
+            .withSuccessHandler(onUploadSuccess)
+            .withFailureHandler(onUploadFailure)
+            .uploadFile(e.target.result, selectedFile.name, expirySelect.value, turnstileToken);
+        };
+        reader.onerror = function () {
+          onUploadFailure({ message: 'ファイルの読み込みに失敗しました。' });
+        };
+        reader.readAsDataURL(selectedFile);
+      });
+
+      function resetButton() {
+        spinner.style.display = 'none';
+        uploadBtnText.textContent = 'アップロード';
+        updateUploadButtonState();
+      }
+
+      function onUploadSuccess(res) {
+        resetButton();
+        // Turnstileは1回使い切りのトークンなので、成否に関わらずウィジェットをリセットして再検証させる
+        if (typeof turnstile !== 'undefined') {
+          turnstile.reset();
+        }
+        turnstileVerified = false;
+        updateUploadButtonState();
+
+        if (!res.success) {
+          showError(res.error);
+          return;
+        }
+        resultUrl.href = res.url;
+        resultUrl.textContent = res.url;
+        resultExpiry.textContent = res.expiresAt;
+        result.style.display = 'block';
+      }
+
+      function onUploadFailure(err) {
+        resetButton();
+        if (typeof turnstile !== 'undefined') {
+          turnstile.reset();
+        }
+        turnstileVerified = false;
+        updateUploadButtonState();
+        showError('エラー: ' + err.message);
+      }
+
+      copyBtn.addEventListener('click', function () {
+        navigator.clipboard.writeText(resultUrl.textContent).then(function () {
+          copyBtn.textContent = 'コピー済み';
+          setTimeout(function () { copyBtn.textContent = 'コピー'; }, 1500);
+        });
+      });
+    })();
+  </script>
+</body>
+</html>
