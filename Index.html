@@ -444,6 +444,8 @@
         navigator.clipboard.writeText(resultUrl.textContent).then(function () {
           copyBtn.textContent = 'コピー済み';
           setTimeout(function () { copyBtn.textContent = 'コピー'; }, 1500);
+        }).catch(function () {
+          showError('クリップボードへのコピーに失敗しました。URLを長押し(または選択)してコピーしてください。');
         });
       });
     })();

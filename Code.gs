@@ -29,6 +29,8 @@ var COL_EXPIRES_AT = 5;
 var COLUMN_COUNT = 5;
 var HEADER_ROW = 1;
 var DATA_START_ROW = 2; // ヘッダー行の次の行
+// 列順は COL_TOKEN, COL_FILE_ID, COL_FILE_NAME, COL_MIME_TYPE, COL_EXPIRES_AT と一致させる
+var SHEET_HEADERS = ['token', 'fileId', 'fileName', 'mimeType', 'expiresAt'];
 
 // ファイル形式は原則すべて許可する(拡張子・MIMEタイプによる制限は行わない)。
 // 代わりに、配信時に必ず application/octet-stream として返す「強制ダウンロード」方式で、
@@ -127,7 +129,7 @@ function uploadFile(base64Data, fileName, expiryHours, turnstileToken) {
         success: true,
         url: url,
         fileName: fileName,
-        expiresAt: Utilities.formatDate(expiresAt, Session.getScriptTimeZone(), 'yyyy/MM/dd HH:mm')
+        expiresAt: formatDateTime_(expiresAt)
       };
     } finally {
       lock.releaseLock();
@@ -194,24 +196,20 @@ function sanitizeFileName_(fileName) {
 }
 
 /**
- * 管理用スプレッドシートのセルに書き込む値を「数式インジェクション(CSVインジェクション)」から保護する。
+ * 管理用スプレッドシートのセルに書き込む文字列を「数式インジェクション(CSVインジェクション)」から保護する。
  * 拡張子/形式の制限を撤廃したことで fileName・mimeType には任意の文字列が入り得るため、
  * = / + / - / @ で始まる値をそのままセルに書き込むと、シートを開いた際にGoogle Sheetsが
  * これを数式として評価してしまう(外部URLへの自動アクセス等につながる恐れがある)。
  * 先頭にアポストロフィを付与することで、Sheets側に「これは文字列である」ことを明示させ、
  * 数式として評価されないようにする。
  * (アポストロフィはSheetsの書式指定として扱われ、getValues()で読み出した際の文字列値には含まれない)
+ *
+ * 呼び出し元(uploadFile)では常に検証済みの文字列を渡すため、null/undefined は考慮しない。
  */
-function sanitizeForSheet_(value) {
-  if (value === null || value === undefined) {
-    return value;
-  }
+function sanitizeForSheet_(str) {
   // 念のため制御文字(タブ・改行等)も除去しておく
-  var str = String(value).replace(/[\x00-\x1f]/g, '');
-  if (/^[=+\-@]/.test(str)) {
-    str = "'" + str;
-  }
-  return str;
+  str = str.replace(/[\x00-\x1f]/g, '');
+  return /^[=+\-@]/.test(str) ? "'" + str : str;
 }
 
 /**
@@ -239,7 +237,7 @@ function showDownloadPage_(token) {
   return renderDownloadPage_('ok', {
     fileName: record.fileName,
     token: token,
-    expiresAt: Utilities.formatDate(record.expiresAt, Session.getScriptTimeZone(), 'yyyy/MM/dd HH:mm')
+    expiresAt: formatDateTime_(record.expiresAt)
   });
 }
 
@@ -288,7 +286,7 @@ function renderDownloadPage_(status, fields) {
 // ==== 期限切れファイルの自動削除(時間主導型トリガーから実行) ====
 
 /**
- * 期限切れファイルを削除する。時間主導型トリガー(setupTrigger_ が登録)からのみ
+ * 期限切れファイルを削除する。時間主導型トリガー(setupTrigger が登録)からのみ
  * 呼び出される想定の管理用関数。
  *
  * セキュリティ上の注意: 末尾のアンダースコアは単なる命名規則ではなく、Apps Script の
@@ -346,15 +344,20 @@ function removeFilePermanently_(fileId) {
 }
 
 /**
- * トリガーのセットアップ。Apps Script エディタから手動で一度だけ実行する
- * (関数選択プルダウンで "setupTrigger_" を選んで実行する。README参照)。
- * 15分ごとに deleteExpiredFiles_ を実行し、期限切れ後にファイル実体が残る時間を最短化する。
+ * トリガーのセットアップ。Apps Script エディタの関数選択プルダウンで "setupTrigger" を
+ * 選んで手動で一度だけ実行する(README参照)。15分ごとに deleteExpiredFiles_ を実行し、
+ * 期限切れ後にファイル実体が残る時間を最短化する。
  *
- * セキュリティ上の注意: deleteExpiredFiles_ と同様、末尾のアンダースコアにより
- * google.script.run からの匿名呼び出しを遮断している。この関数を外部公開すると、
- * 誰でもトリガーの削除・再作成を任意のタイミングで発生させられてしまう。
+ * セキュリティ上の注意: この関数は "_" を付けていないため、理論上は google.script.run
+ * からも呼び出せてしまう。そのため冒頭で isAuthorizedOwner_() により「実行者がこの
+ * スクリプトのオーナー本人かどうか」を検証し、オーナー以外(匿名の第三者を含む)からの
+ * 呼び出しは例外を投げて拒否する。
  */
-function setupTrigger_() {
+function setupTrigger() {
+  if (!isAuthorizedOwner_()) {
+    throw new Error('この操作はスクリプトのオーナーのみ実行できます。');
+  }
+
   // 既存の同名トリガーを削除してから再作成(重複防止)
   var triggers = ScriptApp.getProjectTriggers();
   triggers.forEach(function (t) {
@@ -369,6 +372,33 @@ function setupTrigger_() {
     .create();
 }
 
+/**
+ * 実行者がこのスクリプトのオーナー本人かどうかを判定する。
+ *
+ * Session.getActiveUser().getEmail() で「今この関数を呼んでいる人」のメールアドレスを取得し、
+ * ScriptApp.getScriptId() が指すスクリプトファイル自体のDrive上のオーナーと比較する。
+ * (このプロジェクトは既に DriveApp を使用しているため、追加の権限承認は発生しない)
+ *
+ * 注意点:
+ *  - Session.getActiveUser().getEmail() は、ドメイン設定等により空文字を返す場合がある。
+ *    その場合は「本人と確認できない」としてフェイルクローズ(拒否)する。
+ *  - エディタから直接実行した場合は、実行者=あなた自身のアカウントが active user になるため、
+ *    通常はオーナー本人であれば問題なく true が返る。
+ */
+function isAuthorizedOwner_() {
+  var activeEmail = Session.getActiveUser().getEmail();
+  if (!activeEmail) {
+    return false;
+  }
+  try {
+    var ownerEmail = DriveApp.getFileById(ScriptApp.getScriptId()).getOwner().getEmail();
+    return activeEmail === ownerEmail;
+  } catch (e) {
+    // オーナー情報が取得できない場合も安全側に倒して拒否する
+    return false;
+  }
+}
+
 // ==== ユーティリティ ====
 
 /**
@@ -380,6 +410,13 @@ function userError_(message) {
   var err = new Error(message);
   err.isUserError = true;
   return err;
+}
+
+/**
+ * 日時を画面表示用の "yyyy/MM/dd HH:mm" 形式(スクリプトのタイムゾーン基準)に整形する。
+ */
+function formatDateTime_(date) {
+  return Utilities.formatDate(date, Session.getScriptTimeZone(), 'yyyy/MM/dd HH:mm');
 }
 
 function generateToken_() {
@@ -423,12 +460,16 @@ function getOrCreateSheet_() {
     props.setProperty('SHEET_ID', ss.getId());
   }
 
-  var sheet = ss.getSheetByName('DB') || ss.getSheets()[0];
-  sheet.setName('DB');
+  var sheet = ss.getSheetByName('DB');
+  if (!sheet) {
+    // 新規作成直後のスプレッドシートには既定シートが1枚だけ存在するので、それをリネームして使う
+    sheet = ss.getSheets()[0];
+    sheet.setName('DB');
+  }
 
   if (sheet.getLastRow() === 0) {
     // 列順は COL_TOKEN, COL_FILE_ID, COL_FILE_NAME, COL_MIME_TYPE, COL_EXPIRES_AT と一致させる
-    sheet.appendRow(['token', 'fileId', 'fileName', 'mimeType', 'expiresAt']);
+    sheet.appendRow(SHEET_HEADERS);
   }
 
   return sheet;
