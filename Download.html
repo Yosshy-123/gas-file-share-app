@@ -4,6 +4,14 @@
   <base target="_top">
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!--
+    このページのURLにはダウンロード用トークン(?token=...)が含まれる。
+    現状は外部リソースの読み込み等は行っていないためRefererを通じたトークン漏洩の
+    実害はないが、将来的に外部フォント・アナリティクス等を追加した際に
+    Refererヘッダー経由でトークンが外部ドメインへ漏れることを予防的に防ぐため、
+    常にReferrerを送出しないポリシーを明示しておく。
+  -->
+  <meta name="referrer" content="no-referrer">
   <style>
     :root {
       --bg-grad-1: #6366f1;
@@ -96,6 +104,18 @@
         </div>
         <h1>リンクの有効期限が切れています</h1>
         <p class="hint">このファイルは有効期限を過ぎたため、既に削除されているか、まもなく削除されます。</p>
+
+      <? } else if (status === 'error') { ?>
+        <div class="icon-circle warn">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 9V13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            <path d="M12 17H12.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            <path d="M4 12C4 7.58172 7.58172 4 12 4C14.5013 4 16.7362 5.14994 18.2 6.95083M20 12C20 16.4183 16.4183 20 12 20C9.4987 20 7.26377 18.8501 5.8 16.9492" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M18 3V7H14M6 21V17H10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <h1>一時的な問題が発生しました</h1>
+        <p class="hint">サーバー側で問題が発生した可能性があります。しばらくしてから、ページを再読み込みしてもう一度お試しください。<br>解消しない場合は、リンクの発行元にご確認ください。</p>
 
       <? } else { ?>
         <div class="icon-circle error">

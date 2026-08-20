@@ -19,6 +19,16 @@ var VALID_EXPIRY_HOURS = [1, 3, 6, 12, 24, 72, 168]; // 1h,3h,6h,12h,1d,3d,7d
 var TURNSTILE_VERIFY_URL = 'https://challenges.cloudflare.com/turnstile/v0/siteverify';
 var DELETE_TRIGGER_HANDLER = 'deleteExpiredFiles_';
 var DELETE_TRIGGER_INTERVAL_MINUTES = 15;
+var LOCK_WAIT_TIMEOUT_MS = 30000; // Drive/Sheet書き込み用ロックの最大待機時間
+// deleteExpiredFiles_ 用のロック待機時間。uploadFile よりかなり短く設定し、
+// トリガーの多重起動防止が目的であって「待たされて失敗する」ことが目的ではないため、
+// 少し待って取れなければ潔く諦めて次回トリガー(15分後)に委ねる。
+var DELETE_LOCK_WAIT_TIMEOUT_MS = 5000;
+var FILE_NAME_MAX_LENGTH = 200; // sanitizeFileName_ で切り詰めるファイル名の最大文字数
+var HTTP_STATUS_OK = 200; // UrlFetchApp のレスポンスコード比較用
+// generateToken_ が生成するトークンは常に32文字の16進数(UUID v4からハイフンを除去したもの)。
+// この形式に一致しない入力は、Sheetsへのアクセスを行う前に早期リジェクトする。
+var TOKEN_PATTERN = /^[0-9a-f]{32}$/;
 
 // 管理用スプレッドシート(DBシート)の列レイアウト。マジックナンバー撲滅のため一元管理する。
 var COL_TOKEN = 1;
@@ -39,27 +49,49 @@ var SHEET_HEADERS = ['token', 'fileId', 'fileName', 'mimeType', 'expiresAt'];
 // ==== エントリーポイント ====
 
 function doGet(e) {
-  var token = e.parameter.token;
-  var action = e.parameter.action;
+  try {
+    var token = e.parameter.token;
+    var action = e.parameter.action;
 
-  if (token) {
-    if (action === 'download') {
-      return serveFile_(token);
+    if (token) {
+      // generateToken_ が生成する形式(32文字の16進数)に一致しない token は、
+      // Sheetsへ問い合わせるまでもなく無効なリンクと確定できるため早期リジェクトする。
+      // これによりレート制限のない現状でも無駄なSheets APIアクセスを抑えられる。
+      if (!TOKEN_PATTERN.test(token)) {
+        return renderDownloadPage_('notfound');
+      }
+      if (action === 'download') {
+        return serveFile_(token);
+      }
+      return showDownloadPage_(token);
     }
-    return showDownloadPage_(token);
+
+    var siteKey = PropertiesService.getScriptProperties().getProperty('TURNSTILE_SITE_KEY');
+
+    var template = HtmlService.createTemplateFromFile('Index');
+    template.expiryOptions = VALID_EXPIRY_HOURS;
+    template.defaultExpiry = DEFAULT_EXPIRY_HOURS;
+    template.maxSizeMB = MAX_FILE_SIZE / (1024 * 1024);
+    template.turnstileSiteKey = siteKey || '';
+    template.turnstileConfigured = !!siteKey;
+    return template.evaluate()
+      .setTitle('ファイル共有')
+      .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+  } catch (err) {
+    // Drive/Sheetsの一時的な障害・クォータ超過等、想定外の例外をここで必ず捕捉する。
+    // 捕捉しない場合、GAS標準の生エラー画面(スタック情報等を含みうる)がそのまま
+    // 利用者に表示されてしまうため、常に自前の安全な画面にフォールバックさせ、
+    // 詳細はサーバー側ログにのみ残す。
+    //
+    // 「リンクが無効/期限切れ」(notfound/expired)とは意図的にステータスを分けている。
+    // 一律 notfound にしてしまうと、実際にはシステム側の一時的な問題であるにも
+    // 関わらず「リンクが恒久的に無効」であるかのように利用者に伝わってしまい、
+    // 再試行すれば解決する可能性がある状況で利用者が諦めてしまう(UX上の不親切さ)。
+    // 逆に notfound/expired 等の正常系の結果と紛れると運用者側もログを見なければ
+    // システム障害の発生に気づけなくなるため、区別しておくことは運用面でも重要。
+    console.error('doGet failed: ' + (err && err.stack ? err.stack : err));
+    return renderDownloadPage_('error');
   }
-
-  var siteKey = PropertiesService.getScriptProperties().getProperty('TURNSTILE_SITE_KEY');
-
-  var template = HtmlService.createTemplateFromFile('Index');
-  template.expiryOptions = VALID_EXPIRY_HOURS;
-  template.defaultExpiry = DEFAULT_EXPIRY_HOURS;
-  template.maxSizeMB = MAX_FILE_SIZE / (1024 * 1024);
-  template.turnstileSiteKey = siteKey || '';
-  template.turnstileConfigured = !!siteKey;
-  return template.evaluate()
-    .setTitle('ファイル共有')
-    .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
 
 /**
@@ -100,7 +132,7 @@ function uploadFile(base64Data, fileName, expiryHours, turnstileToken) {
     }
 
     var lock = LockService.getScriptLock();
-    lock.waitLock(30000);
+    lock.waitLock(LOCK_WAIT_TIMEOUT_MS);
     try {
       var decoded = Utilities.base64Decode(rawBase64);
       var blob = Utilities.newBlob(decoded, mimeType, fileName);
@@ -145,6 +177,11 @@ function uploadFile(base64Data, fileName, expiryHours, turnstileToken) {
   }
 }
 
+// ==== 入力検証・サニタイズ ====
+// このセクションの関数はいずれも「受け取った値が安全か検証する/安全な形へ変換する」
+// という単一の関心事を持つ。ルーティングを担う doGet/showDownloadPage_/serveFile_ 等の
+// エントリーポイント関数とは役割が異なるため、明示的にセクションを分けている。
+
 /**
  * Cloudflare Turnstile のトークンをサーバー側で検証する。
  * シークレットキー未設定の場合は「フェイルクローズ」(アップロードを拒否)する。
@@ -167,7 +204,7 @@ function verifyTurnstile_(token) {
     muteHttpExceptions: true
   });
 
-  if (res.getResponseCode() !== 200) {
+  if (res.getResponseCode() !== HTTP_STATUS_OK) {
     return false;
   }
 
@@ -176,23 +213,101 @@ function verifyTurnstile_(token) {
 }
 
 /**
- * ファイル名の最低限の安全化。拡張子や形式による制限はしない(全形式許可の方針)が、
- * パス区切り文字や制御文字を除去し、空/過長なファイル名を弾く。
+ * ファイル名の安全化。拡張子や形式による制限はしない(全形式許可の方針)が、
+ * パス区切り文字・制御文字・Unicode双方向制御文字等を除去し、空/過長なファイル名を弾く。
  * (実際にDriveへ保存するファイル名・ダウンロード時のファイル名として使われる値)
+ *
+ * 特に、U+202E(RLO)等の双方向制御文字を使うと「実際の拡張子」と「見た目の拡張子」を
+ * 乖離させる、いわゆる拡張子偽装(RLOスプーフィング)が可能になるため、これを除去する。
+ * 例: "invoice_" + U+202E + "cod.exe" は見た目上 "invoice_exe.doc" のように表示されるが
+ *     実体は末尾 ".exe" の実行ファイルである。
+ *
+ * OS横断的な安全性について: ダウンロード時、ブラウザはサーバーが返したファイル名を
+ * そのまま(あるいはOS都合で一部だけ調整して)ローカルファイルとして保存しようとする。
+ * このときOSのファイルシステムで使えない文字が含まれていると、ブラウザ・OSの実装次第で
+ * 保存に失敗したり、意図しない形に無言で書き換えられたりする(環境依存で挙動が割れる)。
+ * そのため、Windows(NTFS)・macOS・Linuxのいずれでも安全に保存できる文字集合に
+ * サーバー側で統一しておく。具体的には以下をすべて `_` に置換・除去する:
+ *   - `\ /`            : 全OS共通のパス区切り文字(Windows/Unix双方)
+ *   - `: * ? " < > |`   : Windows(NTFS/FAT)で予約されている文字
+ *       (`:` はmacOS Classicの旧HFSパス区切りでもあり、Finderが `/` に読み替える等
+ *        歴史的に混乱を招きやすいため合わせて除去する)
+ *   - 制御文字・Unicode双方向制御文字・ゼロ幅文字は従来通り除去
+ * 加えて、Windowsでは末尾のドット・スペースが暗黙的に削除される仕様があり、
+ * これを悪用した拡張子偽装(例: "file.exe" + "." → 保存後に見た目上ドットが消え
+ * "file.exe" のまま実行されてしまう、逆に偽装で隠す手口)を避けるため、
+ * 末尾のドット・スペースの整理も従来通り行う。
  */
 function sanitizeFileName_(fileName) {
   if (!fileName) {
     throw userError_('ファイル名が不正です。');
   }
-  // パス区切り・制御文字を除去(Driveのファイル名として不正な文字の混入防止)
-  var cleaned = fileName.replace(/[\/\\]/g, '_').replace(/[\x00-\x1f]/g, '').trim();
+
+  // Unicode正規化(NFKC): 全角/半角・互換文字の表記ゆれを統一する。
+  // これにより全角スラッシュ(／)によるパス区切り文字フィルタの回避や、
+  // 全角文字(ＣＯＮ 等)によるWindows予約デバイス名の偽装をあわせて検出できるようにする。
+  var cleaned = fileName.normalize('NFKC');
+
+  cleaned = cleaned
+    .replace(/[\/\\]/g, '_')                                  // パス区切り文字(Windows/Unix共通)
+    .replace(/[:*?"<>|]/g, '_')                                // Windows(NTFS/FAT)予約文字・macOS旧HFS区切り(:)
+    .replace(/[\x00-\x1f\x7f]/g, '')                          // ASCII制御文字・DEL
+    .replace(/[\u0080-\u009f]/g, '')                          // C1制御文字
+    .replace(/[\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, '') // Unicode双方向制御文字(RLO等・拡張子偽装対策)
+    .replace(/[\u200b\u200c\u200d\ufeff]/g, '')               // ゼロ幅文字・BOM(見た目操作対策)
+    .trim();
+
+  // 先頭・末尾の連続するドット/スペースを整理
+  // (先頭ドットによる隠しファイル化、Windowsでの末尾ドット・スペースの扱い問題を軽減)
+  cleaned = cleaned.replace(/^[.\s]+/, '').replace(/[.\s]+$/, '');
+
   if (!cleaned) {
     throw userError_('ファイル名が不正です。');
   }
-  if (cleaned.length > 200) {
-    cleaned = cleaned.substring(0, 200);
+
+  cleaned = guardReservedDeviceName_(cleaned);
+
+  cleaned = truncateSafely_(cleaned, FILE_NAME_MAX_LENGTH);
+  // 切り詰めにより末尾がドット/スペースになりうるため再度整理
+  cleaned = cleaned.replace(/[.\s]+$/, '');
+
+  if (!cleaned) {
+    throw userError_('ファイル名が不正です。');
   }
+
   return cleaned;
+}
+
+/**
+ * Windows予約デバイス名(CON/PRN/AUX/NUL/COM1-9/LPT1-9)対策。
+ * sanitizeFileName_ 呼び出し前に既に NFKC 正規化されている前提のため、
+ * 全角文字(ＣＯＮ 等)による偽装もここで検出できる。
+ * sanitizeForSheet_ と同様、「特定のパターンに一致したら安全な形へ変換する」
+ * という単一責務のガード関数として独立させている。
+ */
+function guardReservedDeviceName_(fileName) {
+  var RESERVED_DEVICE_NAMES = /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\.|$)/i;
+  return RESERVED_DEVICE_NAMES.test(fileName) ? '_' + fileName : fileName;
+}
+
+/**
+ * サロゲートペア(絵文字等)を途中で分断しない安全な文字列切り詰め。
+ * 通常の substring(0, maxLen) は、maxLen の位置がサロゲートペアの
+ * 境界と一致しない場合に文字を壊してしまう(不正なコードユニットが残る)ため、
+ * その場合は境界を1文字分手前にずらす。
+ */
+function truncateSafely_(str, maxLen) {
+  if (str.length <= maxLen) {
+    return str;
+  }
+  var cut = maxLen;
+  var code = str.charCodeAt(cut - 1);
+  // 切り詰め位置の直前が高位サロゲート(U+D800-DBFF)の場合、そのままだと
+  // 対応する低位サロゲートが失われて文字が壊れるため、その1文字も含めて切り詰める
+  if (code >= 0xd800 && code <= 0xdbff) {
+    cut = cut - 1;
+  }
+  return str.substring(0, cut);
 }
 
 /**
@@ -221,6 +336,8 @@ function estimateBase64ByteSize_(rawBase64) {
   var padding = (rawBase64.match(/=+$/) || [''])[0].length;
   return Math.floor(rawBase64.length * 3 / 4) - padding;
 }
+
+// ==== 画面描画・ファイル配信 ====
 
 /**
  * ダウンロード情報ページ(token指定・action未指定時)
@@ -257,16 +374,20 @@ function serveFile_(token) {
     return renderDownloadPage_(record ? 'expired' : 'notfound');
   }
 
-  var file;
+  var bytes;
   try {
-    file = DriveApp.getFileById(record.fileId);
+    // ファイルの取得(Drive上に実体が存在するか)と、Blob化・バイト列取得の両方を
+    // 同じtry/catchで保護する。ファイルが破損している、直前に削除された等の
+    // 予期しない例外がここで発生しても doGet まで無防備に伝播させず、
+    // 一律「notfound」として自前のエラー画面を返す。
+    var file = DriveApp.getFileById(record.fileId);
+    bytes = file.getBlob().getBytes();
   } catch (err) {
     return renderDownloadPage_('notfound');
   }
 
   // 元のファイル名(拡張子含む)は維持しつつ、Content-Typeだけ octet-stream に差し替えて
   // ブラウザに「開く」ではなく必ず「ダウンロード」させる
-  var bytes = file.getBlob().getBytes();
   return Utilities.newBlob(bytes, 'application/octet-stream', record.fileName);
 }
 
@@ -295,30 +416,53 @@ function renderDownloadPage_(status, fields) {
  * 匿名の第三者がこの関数を任意のタイミングで実行できてしまう(最小権限の原則違反)。
  * 今後この関数を分割・追加する場合も、クライアントに公開する意図がない限り
  * 末尾に "_" を付けること。
+ *
+ * 排他制御について: Drive/Sheetsの応答遅延等により前回の実行が15分を超えて
+ * 完了していない状態で次のトリガーが起動すると、同じ行を対象に削除処理が
+ * 二重に走る可能性がある(実害は例外がcatchされる程度だが、無駄なAPI呼び出しや
+ * ログの混乱を招く)。これを避けるため uploadFile と同じスクリプト全体のロックを
+ * 使って多重実行を防止する。ロックが取得できない場合(＝前回の実行がまだ
+ * 進行中、またはuploadFileが実行中)は、最大 DELETE_LOCK_WAIT_TIMEOUT_MS(短時間)
+ * だけ待って、それでも取得できなければ諦めて何もせず終了する(＝待ち続けて
+ * トリガーの実行時間を浪費することはしない)。取りこぼした期限切れファイルは
+ * 次回のトリガー(15分後)で処理されるため、安全側に倒した設計となる。
  */
 function deleteExpiredFiles_() {
-  var sheet = getOrCreateSheet_();
-  var lastRow = sheet.getLastRow();
-  if (lastRow < DATA_START_ROW) {
-    return; // データ行なし
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(DELETE_LOCK_WAIT_TIMEOUT_MS)) {
+    // 既に他の実行(前回のdeleteExpiredFiles_、またはuploadFile)がロックを
+    // 保持している。無理に待たず、今回はスキップして次回トリガーに委ねる。
+    console.log('deleteExpiredFiles_: ロック取得に失敗したためスキップします(次回トリガーで再試行)。');
+    return;
   }
 
-  var numDataRows = lastRow - HEADER_ROW;
-  // 判定に使う expiresAt 列だけを読み込む。token/fileId/fileName/mimeType は
-  // 期限切れと判明した行についてのみ後述で個別に取得するため、ここでは取得しない。
-  var expiresAtValues = sheet.getRange(DATA_START_ROW, COL_EXPIRES_AT, numDataRows, 1).getValues();
-  var now = new Date();
-
-  // 下から走査して行削除時のインデックスずれを防ぐ
-  for (var i = numDataRows - 1; i >= 0; i--) {
-    var expiresAt = new Date(expiresAtValues[i][0]);
-
-    if (now > expiresAt) {
-      var rowIndex = i + DATA_START_ROW; // シート上の実際の行番号
-      var fileId = sheet.getRange(rowIndex, COL_FILE_ID, 1, 1).getValue();
-      removeFilePermanently_(fileId);
-      sheet.deleteRow(rowIndex);
+  try {
+    var sheet = getOrCreateSheet_();
+    var lastRow = sheet.getLastRow();
+    if (lastRow < DATA_START_ROW) {
+      return; // データ行なし
     }
+
+    var numDataRows = lastRow - HEADER_ROW;
+    // 全列をまとめて1回で読み込む。期限切れ行の fileId を行ごとに個別取得すると
+    // 同時に多数の行が期限切れになった際に Sheets API 呼び出しが行数分発生してしまうため、
+    // ここでまとめて読み込み、以降はメモリ上の値だけで判定・削除を行う。
+    var rows = sheet.getRange(DATA_START_ROW, COL_TOKEN, numDataRows, COLUMN_COUNT).getValues();
+    var now = new Date();
+
+    // 下から走査して行削除時のインデックスずれを防ぐ
+    for (var i = numDataRows - 1; i >= 0; i--) {
+      var expiresAt = new Date(rows[i][COL_EXPIRES_AT - 1]);
+
+      if (now > expiresAt) {
+        var rowIndex = i + DATA_START_ROW; // シート上の実際の行番号
+        var fileId = rows[i][COL_FILE_ID - 1];
+        removeFilePermanently_(fileId);
+        sheet.deleteRow(rowIndex);
+      }
+    }
+  } finally {
+    lock.releaseLock();
   }
 }
 
