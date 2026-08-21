@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- Download.html と同様、念のためRefererを送出しない -->
+  <meta name="referrer" content="no-referrer">
+  <style>
+    :root {
+      --bg-grad-1: #6366f1;
+      --bg-grad-2: #8b5cf6;
+      --card-bg: #ffffff;
+      --text-main: #1e1b2e;
+      --text-sub: #6b7280;
+      --accent: #6366f1;
+      --accent-dark: #4f46e5;
+      --error-text: #dc2626;
+      --radius: 16px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Kaku Gothic ProN',
+                   'Segoe UI', 'Yu Gothic', sans-serif;
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      background: linear-gradient(135deg, var(--bg-grad-1), var(--bg-grad-2));
+      color: var(--text-main);
+    }
+    .wrap { width: 100%; max-width: 400px; }
+    .card {
+      background: var(--card-bg);
+      border-radius: var(--radius);
+      padding: 40px 28px;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.18);
+      text-align: center;
+    }
+    .icon-circle {
+      width: 64px; height: 64px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      margin: 0 auto 18px;
+      background: #eef2ff;
+      color: var(--accent);
+    }
+    .icon-circle svg { width: 28px; height: 28px; }
+    h1 { font-size: 17px; font-weight: 700; margin: 0 0 6px; word-break: break-word; }
+    .hint { font-size: 13px; color: var(--text-sub); margin: 0 0 20px; line-height: 1.6; }
+    a.download-btn {
+      display: none;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 28px;
+      background: var(--accent);
+      color: #fff;
+      text-decoration: none;
+      border-radius: 10px;
+      font-size: 15px;
+      font-weight: 700;
+      transition: background 0.15s;
+    }
+    a.download-btn:hover { background: var(--accent-dark); }
+    .error-msg {
+      display: none;
+      margin-top: 4px;
+      padding: 10px 12px;
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      border-radius: 8px;
+      color: var(--error-text);
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <div class="icon-circle">
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 4V16M12 16L7 11M12 16L17 11" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M5 20H19" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <h1 id="statusText">ダウンロードを開始しています…</h1>
+      <p class="hint">自動的に開始しない場合は、下のボタンをクリックしてください。</p>
+      <a class="download-btn" id="manualDownload">ダウンロード</a>
+      <div class="error-msg" id="errorMsg">ダウンロード処理に失敗しました。ページを再読み込みしてもう一度お試しください。</div>
+    </div>
+  </div>
+
+  <!--
+    ファイル本体(base64)とファイル名はここでは data-* 属性経由で受け渡す。
+    <script> タグ内で直接 <?= ?> を使うと、値の内容(base64データや特殊文字を含む
+    ファイル名)によって構文エラーになりうるため(README「トラブルシューティング」参照)、
+    <script> 内はテンプレート変数を一切使わない方式で統一している。
+  -->
+  <div id="payload" data-b64="<?= base64Data ?>" data-filename="<?= fileName ?>" style="display:none"></div>
+
+  <script>
+    (function () {
+      var payload = document.getElementById('payload');
+      var manualBtn = document.getElementById('manualDownload');
+      var errorMsg = document.getElementById('errorMsg');
+      var statusText = document.getElementById('statusText');
+
+      function showError() {
+        statusText.textContent = 'ダウンロードに失敗しました';
+        errorMsg.style.display = 'block';
+      }
+
+      try {
+        var b64 = payload.getAttribute('data-b64');
+        var fileName = payload.getAttribute('data-filename');
+
+        var byteChars = atob(b64);
+        var byteNumbers = new Array(byteChars.length);
+        for (var i = 0; i < byteChars.length; i++) {
+          byteNumbers[i] = byteChars.charCodeAt(i);
+        }
+        var byteArray = new Uint8Array(byteNumbers);
+
+        // 元のMIMEタイプに関わらず常に application/octet-stream として Blob 化する。
+        // これにより、HTML/SVG/JS等のアクティブコンテンツがブラウザ上で実行・
+        // レンダリングされず、必ず「ダウンロードのみ」となる(serveFile_ 参照)。
+        var blob = new Blob([byteArray], { type: 'application/octet-stream' });
+        var url = URL.createObjectURL(blob);
+
+        manualBtn.href = url;
+        manualBtn.download = fileName;
+        manualBtn.style.display = 'inline-flex';
+
+        // ダウンロードを自動的に発火させる
+        var autoLink = document.createElement('a');
+        autoLink.href = url;
+        autoLink.download = fileName;
+        document.body.appendChild(autoLink);
+        autoLink.click();
+        document.body.removeChild(autoLink);
+
+        statusText.textContent = 'ダウンロードを開始しました';
+
+        // Blob URLはページ遷移時に自動解放されるが、念のため一定時間後に明示的に解放する
+        setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
+      } catch (e) {
+        showError();
+      }
+    })();
+  </script>
+</body>
+</html>

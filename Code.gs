@@ -66,14 +66,23 @@ function doGet(e) {
       return showDownloadPage_(token);
     }
 
-    var siteKey = PropertiesService.getScriptProperties().getProperty('TURNSTILE_SITE_KEY');
+    var props = PropertiesService.getScriptProperties();
+    var siteKey = props.getProperty('TURNSTILE_SITE_KEY');
+    // uploadFile() は verifyTurnstile_() 内で TURNSTILE_SECRET_KEY 未設定を
+    // フェイルクローズ(エラー)として扱う。そのため画面側の「設定済み」判定も
+    // SITE_KEY だけでなく SECRET_KEY の有無まで見て揃えておかないと、
+    // 「ウィジェットは表示されCAPTCHAは通過できるのに、送信すると必ず
+    // "サーバー側で未設定です" と失敗する」という利用者視点で原因不明の
+    // 状態になってしまう。
+    var secretKey = props.getProperty('TURNSTILE_SECRET_KEY');
+    var turnstileConfigured = !!siteKey && !!secretKey;
 
     var template = HtmlService.createTemplateFromFile('Index');
     template.expiryOptions = VALID_EXPIRY_HOURS;
     template.defaultExpiry = DEFAULT_EXPIRY_HOURS;
     template.maxSizeMB = MAX_FILE_SIZE / (1024 * 1024);
-    template.turnstileSiteKey = siteKey || '';
-    template.turnstileConfigured = !!siteKey;
+    template.turnstileSiteKey = turnstileConfigured ? siteKey : '';
+    template.turnstileConfigured = turnstileConfigured;
     return template.evaluate()
       .setTitle('ファイル共有')
       .addMetaTag('viewport', 'width=device-width, initial-scale=1');
@@ -348,7 +357,7 @@ function showDownloadPage_(token) {
   if (!record) {
     return renderDownloadPage_('notfound');
   }
-  if (new Date() > record.expiresAt) {
+  if (isExpired_(record.expiresAt)) {
     return renderDownloadPage_('expired');
   }
   return renderDownloadPage_('ok', {
@@ -365,9 +374,14 @@ function showDownloadPage_(token) {
 
 /**
  * 実ファイル配信(token指定・action=download)
- * 有効な場合は Blob を直接返却してブラウザにダウンロードさせる。
  *
- * ファイル形式を制限していない代わりに、ここで必ず Content-Type を
+ * 【重要】Apps Script の doGet は HtmlOutput または TextOutput 以外の値を返せない仕様のため、
+ * Blob を直接 return することはできない(実行すると「返された値はサポートされている
+ * 戻り値の型ではありませんでした」というエラーになる)。そのため、ファイル本体を
+ * base64化して Serve.html に埋め込み、クライアント側の JavaScript で Blob に変換して
+ * ダウンロードを発火させる方式を取っている。
+ *
+ * ファイル形式を制限していない代わりに、Serve.html 側で Blob の Content-Type を必ず
  * application/octet-stream に強制している。これにより、たとえ HTML/SVG/JS 等の
  * アクティブコンテンツがアップロードされていても、ブラウザ上で実行・レンダリングされず
  * 「ダウンロードのみ」となる(実行するかどうかはダウンロードした本人の判断に委ねられる)。
@@ -375,7 +389,7 @@ function showDownloadPage_(token) {
 function serveFile_(token) {
   var record = getFileByToken_(token);
 
-  if (!record || new Date() > record.expiresAt) {
+  if (!record || isExpired_(record.expiresAt)) {
     return renderDownloadPage_(record ? 'expired' : 'notfound');
   }
 
@@ -391,9 +405,14 @@ function serveFile_(token) {
     return renderDownloadPage_('notfound');
   }
 
-  // 元のファイル名(拡張子含む)は維持しつつ、Content-Typeだけ octet-stream に差し替えて
-  // ブラウザに「開く」ではなく必ず「ダウンロード」させる
-  return Utilities.newBlob(bytes, 'application/octet-stream', record.fileName);
+  // base64化するとサイズは約4/3倍になる(MAX_FILE_SIZE=20MBなら最大約27MB相当)。
+  // HtmlOutput のペイロードサイズには実務上の上限があるため、MAX_FILE_SIZE を
+  // 大きく変更する場合はダウンロードが正常に完了するか事前に確認すること。
+  var base64Data = Utilities.base64Encode(bytes);
+  var template = HtmlService.createTemplateFromFile('Serve');
+  template.fileName = record.fileName;
+  template.base64Data = base64Data;
+  return template.evaluate().setTitle('ダウンロード中');
 }
 
 /**
@@ -459,7 +478,7 @@ function deleteExpiredFiles_() {
     for (var i = numDataRows - 1; i >= 0; i--) {
       var expiresAt = new Date(rows[i][COL_EXPIRES_AT - 1]);
 
-      if (now > expiresAt) {
+      if (isExpired_(expiresAt, now)) {
         var rowIndex = i + DATA_START_ROW; // シート上の実際の行番号
         var fileId = rows[i][COL_FILE_ID - 1];
         removeFilePermanently_(fileId);
@@ -559,6 +578,16 @@ function userError_(message) {
   var err = new Error(message);
   err.isUserError = true;
   return err;
+}
+
+/**
+ * expiresAt が(基準時刻 now 時点で)期限切れかどうかを判定する。
+ * showDownloadPage_ / serveFile_ / deleteExpiredFiles_ の3箇所で全く同じ
+ * 比較が必要になるため、判定基準を一箇所に集約している。
+ * now を省略した場合は呼び出し時点の現在時刻を基準にする。
+ */
+function isExpired_(expiresAt, now) {
+  return (now || new Date()) > expiresAt;
 }
 
 /**
