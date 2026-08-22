@@ -7,19 +7,25 @@
   <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
   <style>
     :root {
-      --bg-grad-1: #6366f1;
-      --bg-grad-2: #8b5cf6;
+      --bg: #f1f2f5;
       --card-bg: #ffffff;
-      --text-main: #1e1b2e;
+      --text-main: #20242c;
       --text-sub: #6b7280;
-      --border: #e5e7eb;
-      --accent: #6366f1;
-      --accent-dark: #4f46e5;
-      --success-bg: #f0fdf4;
-      --success-border: #86efac;
-      --success-text: #166534;
-      --error-text: #dc2626;
-      --radius: 16px;
+      --border: #e2e4e9;
+      --accent: #4a5578;
+      --accent-dark: #383f5a;
+      --surface: #f6f7f9;
+      --surface-hover: #eceef2;
+      --success-bg: #eef6f0;
+      --success-border: #cfe3d3;
+      --success-text: #2f6b45;
+      --error-bg: #fbeeee;
+      --error-border: #f0cbcb;
+      --error-text: #a13a3a;
+      --warning-bg: #fbf3e6;
+      --warning-border: #eeddb3;
+      --warning-text: #8a6116;
+      --radius: 10px;
     }
     * { box-sizing: border-box; }
     body {
@@ -31,42 +37,45 @@
       align-items: center;
       justify-content: center;
       padding: 24px;
-      background: linear-gradient(135deg, var(--bg-grad-1), var(--bg-grad-2));
+      background: var(--bg);
       color: var(--text-main);
     }
     .wrap { width: 100%; max-width: 440px; }
-    .header { text-align: center; margin-bottom: 20px; color: #fff; }
-    .header h1 { font-size: 22px; font-weight: 700; margin: 0 0 6px; letter-spacing: -0.02em; }
-    .header p { font-size: 13px; margin: 0; opacity: 0.85; }
+    .header { text-align: center; margin-bottom: 20px; }
+    .header h1 { font-size: 20px; font-weight: 700; margin: 0 0 6px; letter-spacing: -0.01em; color: var(--text-main); }
+    .header p { font-size: 13px; margin: 0; color: var(--text-sub); }
 
     .card {
       background: var(--card-bg);
+      border: 1px solid var(--border);
       border-radius: var(--radius);
       padding: 28px;
-      box-shadow: 0 20px 50px rgba(0,0,0,0.18);
+      box-shadow: 0 1px 2px rgba(16,24,40,0.04);
     }
 
     .config-warning {
       margin-bottom: 16px;
       padding: 10px 12px;
-      background: #fffbeb;
-      border: 1px solid #fde68a;
+      background: var(--warning-bg);
+      border: 1px solid var(--warning-border);
       border-radius: 8px;
-      color: #92400e;
+      color: var(--warning-text);
       font-size: 12.5px;
       line-height: 1.5;
     }
 
     .dropzone {
-      border: 2px dashed #c7c9f5;
-      border-radius: 12px;
+      border: 1px dashed var(--border);
+      border-radius: 10px;
       padding: 28px 16px;
       text-align: center;
       cursor: pointer;
       transition: border-color 0.15s, background 0.15s;
-      background: #f7f7ff;
+      background: var(--surface);
     }
-    .dropzone.dragover { border-color: var(--accent); background: #edecff; }
+    .dropzone.dragover { border-color: var(--accent); background: var(--surface-hover); }
+    .dropzone:hover { border-color: var(--accent); background: var(--surface-hover); }
+    .dropzone:hover .icon { color: var(--accent-dark); }
     .dropzone .icon { margin-bottom: 8px; color: var(--accent); }
     .dropzone .icon svg { width: 28px; height: 28px; display: block; margin: 0 auto; }
     .dropzone .main-text { font-size: 14px; font-weight: 600; color: var(--text-main); }
@@ -79,7 +88,8 @@
       gap: 10px;
       margin-top: 14px;
       padding: 10px 12px;
-      background: #f3f4f6;
+      background: var(--surface);
+      border: 1px solid var(--border);
       border-radius: 10px;
       font-size: 13px;
     }
@@ -112,7 +122,7 @@
       background-repeat: no-repeat;
       background-position: right 14px center;
     }
-    select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(99,102,241,0.15); }
+    select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(74,85,120,0.12); }
 
     .turnstile-wrap {
       margin-top: 20px;
@@ -131,15 +141,14 @@
       font-size: 15px;
       font-weight: 700;
       cursor: pointer;
-      transition: background 0.15s, transform 0.1s;
+      transition: background 0.15s;
       display: flex;
       align-items: center;
       justify-content: center;
       gap: 8px;
     }
     button.upload-btn:hover:not(:disabled) { background: var(--accent-dark); }
-    button.upload-btn:active:not(:disabled) { transform: scale(0.98); }
-    button.upload-btn:disabled { background: #c7c9f5; cursor: default; }
+    button.upload-btn:disabled { background: #c6cad4; cursor: default; }
 
     .spinner {
       width: 15px; height: 15px;
@@ -155,8 +164,8 @@
       display: none;
       margin-top: 12px;
       padding: 10px 12px;
-      background: #fef2f2;
-      border: 1px solid #fecaca;
+      background: var(--error-bg);
+      border: 1px solid var(--error-border);
       border-radius: 8px;
       color: var(--error-text);
       font-size: 13px;
@@ -168,10 +177,10 @@
       padding: 18px;
       background: var(--success-bg);
       border: 1px solid var(--success-border);
-      border-radius: 12px;
-      animation: fadeIn 0.3s ease;
+      border-radius: 10px;
+      animation: fadeIn 0.2s ease;
     }
-    @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
     .result .label { font-size: 12px; font-weight: 700; color: var(--success-text); text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 8px; }
     .result .url-box {
       display: flex;
@@ -216,7 +225,7 @@
       <? if (!turnstileConfigured) { ?>
         <div class="config-warning">
           ⚠️ Turnstileが未設定のため、このデプロイではアップロードが無効化されています。管理者は Script Properties に
-          <code>TURNSTILE_SITE_KEY</code> / <code>TURNSTILE_SECRET_KEY</code> を設定してください(README参照)。
+          <code>TURNSTILE_SITE_KEY</code> / <code>TURNSTILE_SECRET_KEY</code> を設定してください。
         </div>
       <? } ?>
 

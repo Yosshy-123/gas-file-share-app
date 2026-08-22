@@ -14,14 +14,18 @@
   <meta name="referrer" content="no-referrer">
   <style>
     :root {
-      --bg-grad-1: #6366f1;
-      --bg-grad-2: #8b5cf6;
+      --bg: #f1f2f5;
       --card-bg: #ffffff;
-      --text-main: #1e1b2e;
+      --text-main: #20242c;
       --text-sub: #6b7280;
-      --accent: #6366f1;
-      --accent-dark: #4f46e5;
-      --radius: 16px;
+      --border: #e2e4e9;
+      --accent: #4a5578;
+      --accent-dark: #383f5a;
+      --warning-bg: #fbf3e6;
+      --warning-text: #a3771f;
+      --error-bg: #fbeeee;
+      --error-text: #a13a3a;
+      --radius: 10px;
     }
     * { box-sizing: border-box; }
     body {
@@ -33,15 +37,16 @@
       align-items: center;
       justify-content: center;
       padding: 24px;
-      background: linear-gradient(135deg, var(--bg-grad-1), var(--bg-grad-2));
+      background: var(--bg);
       color: var(--text-main);
     }
     .wrap { width: 100%; max-width: 400px; }
     .card {
       background: var(--card-bg);
+      border: 1px solid var(--border);
       border-radius: var(--radius);
       padding: 40px 28px;
-      box-shadow: 0 20px 50px rgba(0,0,0,0.18);
+      box-shadow: 0 1px 2px rgba(16,24,40,0.04);
       text-align: center;
     }
     .icon-circle {
@@ -51,9 +56,9 @@
       margin: 0 auto 18px;
     }
     .icon-circle svg { width: 28px; height: 28px; }
-    .icon-circle.ok { background: #eef2ff; color: var(--accent); }
-    .icon-circle.warn { background: #fff7ed; color: #d97706; }
-    .icon-circle.error { background: #fef2f2; color: #dc2626; }
+    .icon-circle.ok { background: #eef0f5; color: var(--accent); }
+    .icon-circle.warn { background: var(--warning-bg); color: var(--warning-text); }
+    .icon-circle.error { background: var(--error-bg); color: var(--error-text); }
 
     h1 { font-size: 17px; font-weight: 700; margin: 0 0 6px; word-break: break-word; }
     .hint { font-size: 13px; color: var(--text-sub); margin: 0 0 24px; line-height: 1.6; }
@@ -108,10 +113,9 @@
       <? } else if (status === 'error') { ?>
         <div class="icon-circle warn">
           <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M12 9V13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-            <path d="M12 17H12.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-            <path d="M4 12C4 7.58172 7.58172 4 12 4C14.5013 4 16.7362 5.14994 18.2 6.95083M20 12C20 16.4183 16.4183 20 12 20C9.4987 20 7.26377 18.8501 5.8 16.9492" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            <path d="M18 3V7H14M6 21V17H10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/>
+            <path d="M12 8V13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            <path d="M12 16.5H12.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
           </svg>
         </div>
         <h1>一時的な問題が発生しました</h1>
