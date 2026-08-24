@@ -412,7 +412,9 @@ function serveFile_(token) {
   var template = HtmlService.createTemplateFromFile('Serve');
   template.fileName = record.fileName;
   template.base64Data = base64Data;
-  return template.evaluate().setTitle('ダウンロード中');
+  return template.evaluate()
+    .setTitle('ダウンロード中')
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
 
 /**
@@ -425,7 +427,9 @@ function renderDownloadPage_(status, fields) {
   for (var key in fields) {
     template[key] = fields[key];
   }
-  return template.evaluate().setTitle('ファイルダウンロード');
+  return template.evaluate()
+    .setTitle('ファイルダウンロード')
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
 
 // ==== 期限切れファイルの自動削除(時間主導型トリガーから実行) ====
