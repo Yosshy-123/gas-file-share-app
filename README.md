@@ -20,13 +20,12 @@
 
 ## 1. Apps Script プロジェクトの作成
 1. [script.google.com](https://script.google.com) にアクセスし「新しいプロジェクト」を作成
-2. デフォルトの `コード.gs`(または `Code.gs`)を `Config.gs` の内容で置き換える
-3. ファイル追加(＋ボタン →「スクリプト」)で、以下の名前のファイルを作成し、それぞれ対応する
+2. ファイル追加(＋ボタン →「スクリプト」)で、以下の名前のファイルを作成し、それぞれ対応する
    `.gs` の内容を貼り付ける(拡張子 `.gs` は自動付与されるため、ファイル名のみ入力する):
-   `Router` / `UploadService` / `DownloadService` / `Sanitize` / `Storage` / `Maintenance` / `Utils`
-4. ファイル追加(＋ボタン →「HTML」)で `Index` という名前のHTMLファイルを作成し、`Index.html` の内容を貼り付け
-5. 同様に `Download` という名前のHTMLファイルを作成し、`Download.html` の内容を貼り付け
-6. 同様に `Common` という名前のHTMLファイルを作成し、`Common.html` の内容を貼り付け
+   `Config` / `Router` / `UploadService` / `DownloadService` / `Sanitize` / `Storage` / `Maintenance` / `Utils`
+3. ファイル追加(＋ボタン →「HTML」)で `Index` という名前のHTMLファイルを作成し、`Index.html` の内容を貼り付け
+4. 同様に `Download` という名前のHTMLファイルを作成し、`Download.html` の内容を貼り付け
+5. 同様に `Common` という名前のHTMLファイルを作成し、`Common.html` の内容を貼り付け
 
 ## 2. Cloudflare Turnstile の設定(必須・匿名アップロード対策)
 このアプリは「リンクを知っていれば誰でもダウンロード可」ですが、**アップロードは匿名の第三者が無制限に行えないよう Cloudflare Turnstile による検証を必須化**しています。未設定のままデプロイすると、アップロード画面に警告が表示され、アップロード自体ができません(フェイルクローズ)。
@@ -50,7 +49,7 @@
 3. 追加後、`appsscript.json` に `Drive` サービスが登録されていることを確認
 
 ## 4. 初回セットアップ(トリガー登録)
-1. Apps Scriptエディタの関数選択プルダウンで `setupTrigger` を選択して実行
+1. `Storage.gs` のApps Scriptエディタの関数選択プルダウンで `setupTrigger` を選択して実行
    - `setupTrigger` は関数の冒頭で「実行者がこのスクリプトのオーナー本人かどうか」を検証するため、
      オーナー以外(匿名の第三者を含む)が実行した場合はエラーになります(詳細は下記「10」参照)
 2. 初回実行時は権限承認のダイアログが出るので許可する
