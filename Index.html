@@ -1,68 +1,16 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <base target="_top">
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <?!= include_('Common'); ?>
   <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
   <style>
-    :root {
-      --bg: #f1f2f5;
-      --card-bg: #ffffff;
-      --text-main: #20242c;
-      --text-sub: #6b7280;
-      --border: #e2e4e9;
-      --accent: #4a5578;
-      --accent-dark: #383f5a;
-      --surface: #f6f7f9;
-      --surface-hover: #eceef2;
-      --success-bg: #eef6f0;
-      --success-border: #cfe3d3;
-      --success-text: #2f6b45;
-      --error-bg: #fbeeee;
-      --error-border: #f0cbcb;
-      --error-text: #a13a3a;
-      --warning-bg: #fbf3e6;
-      --warning-border: #eeddb3;
-      --warning-text: #8a6116;
-      --radius: 10px;
-    }
-    * { box-sizing: border-box; }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Kaku Gothic ProN',
-                   'Segoe UI', 'Yu Gothic', sans-serif;
-      margin: 0;
-      min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 24px;
-      background: var(--bg);
-      color: var(--text-main);
-    }
-    .wrap { width: 100%; max-width: 440px; }
+    .wrap { max-width: 440px; }
     .header { text-align: center; margin-bottom: 20px; }
     .header h1 { font-size: 20px; font-weight: 700; margin: 0 0 6px; letter-spacing: -0.01em; color: var(--text-main); }
     .header p { font-size: 13px; margin: 0; color: var(--text-sub); }
 
-    .card {
-      background: var(--card-bg);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 28px;
-      box-shadow: 0 1px 2px rgba(16,24,40,0.04);
-    }
-
-    .config-warning {
-      margin-bottom: 16px;
-      padding: 10px 12px;
-      background: var(--warning-bg);
-      border: 1px solid var(--warning-border);
-      border-radius: 8px;
-      color: var(--warning-text);
-      font-size: 12.5px;
-      line-height: 1.5;
-    }
+    .card { padding: 28px; }
+    .config-warning { margin-bottom: 16px; }
 
     .dropzone {
       border: 1px dashed var(--border);
@@ -160,16 +108,7 @@
     }
     @keyframes spin { to { transform: rotate(360deg); } }
 
-    .error-msg {
-      display: none;
-      margin-top: 12px;
-      padding: 10px 12px;
-      background: var(--error-bg);
-      border: 1px solid var(--error-border);
-      border-radius: 8px;
-      color: var(--error-text);
-      font-size: 13px;
-    }
+    #errorMsg { display: none; margin-top: 12px; }
 
     .result {
       display: none;
@@ -223,7 +162,7 @@
 
     <div class="card">
       <? if (!turnstileConfigured) { ?>
-        <div class="config-warning">
+        <div class="msg-box warn config-warning">
           ⚠️ Turnstileが未設定のため、このデプロイではアップロードが無効化されています。管理者は Script Properties に
           <code>TURNSTILE_SITE_KEY</code> / <code>TURNSTILE_SECRET_KEY</code> を設定してください。
         </div>
@@ -271,7 +210,7 @@
         <span id="uploadBtnText">アップロード</span>
       </button>
 
-      <div class="error-msg" id="errorMsg"></div>
+      <p class="msg-box error" id="errorMsg"></p>
 
       <div class="result" id="result">
         <div class="label">共有URLを発行しました</div>

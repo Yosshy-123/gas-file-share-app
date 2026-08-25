@@ -1,54 +1,11 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <base target="_top">
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <!--
-    このページのURLにはダウンロード用トークン(?token=...)が含まれる。
-    現状は外部リソースの読み込み等は行っていないためRefererを通じたトークン漏洩の
-    実害はないが、将来的に外部フォント・アナリティクス等を追加した際に
-    Refererヘッダー経由でトークンが外部ドメインへ漏れることを予防的に防ぐため、
-    常にReferrerを送出しないポリシーを明示しておく。
-  -->
-  <meta name="referrer" content="no-referrer">
+  <?!= include_('Common'); ?>
   <style>
-    :root {
-      --bg: #f1f2f5;
-      --card-bg: #ffffff;
-      --text-main: #20242c;
-      --text-sub: #6b7280;
-      --border: #e2e4e9;
-      --accent: #4a5578;
-      --accent-dark: #383f5a;
-      --warning-bg: #fbf3e6;
-      --warning-text: #a3771f;
-      --error-bg: #fbeeee;
-      --error-text: #a13a3a;
-      --radius: 10px;
-    }
-    * { box-sizing: border-box; }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Kaku Gothic ProN',
-                   'Segoe UI', 'Yu Gothic', sans-serif;
-      margin: 0;
-      min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 24px;
-      background: var(--bg);
-      color: var(--text-main);
-    }
-    .wrap { width: 100%; max-width: 400px; }
-    .card {
-      background: var(--card-bg);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 40px 28px;
-      box-shadow: 0 1px 2px rgba(16,24,40,0.04);
-      text-align: center;
-    }
+    .wrap { max-width: 400px; }
+    .card { padding: 40px 28px; text-align: center; }
+
     .icon-circle {
       width: 64px; height: 64px;
       border-radius: 50%;
@@ -61,23 +18,27 @@
     .icon-circle.error { background: var(--error-bg); color: var(--error-text); }
 
     h1 { font-size: 17px; font-weight: 700; margin: 0 0 6px; word-break: break-word; }
-    .hint { font-size: 13px; color: var(--text-sub); margin: 0 0 24px; line-height: 1.6; }
+    .hint { margin: 0 0 24px; }
 
-    a.download-btn {
+    button.download-btn {
       display: inline-flex;
       align-items: center;
       gap: 8px;
       padding: 12px 28px;
       background: var(--accent);
       color: #fff;
-      text-decoration: none;
+      border: none;
       border-radius: 10px;
       font-size: 15px;
       font-weight: 700;
-      transition: background 0.15s;
+      font-family: inherit;
+      cursor: pointer;
+      transition: background 0.15s, opacity 0.15s;
     }
-    a.download-btn:hover { background: var(--accent-dark); }
-    a.download-btn svg { width: 16px; height: 16px; }
+    button.download-btn:hover:not([aria-disabled="true"]) { background: var(--accent-dark); }
+    button.download-btn svg { width: 16px; height: 16px; }
+
+    #downloadError { margin-top: 14px; text-align: left; }
   </style>
 </head>
 <body>
@@ -92,13 +53,14 @@
         </div>
         <h1><?= fileName ?></h1>
         <p class="hint">有効期限: <?= expiresAt ?> まで</p>
-        <a class="download-btn" href="<?= webAppUrl ?>?token=<?= token ?>&action=download">
+        <button type="button" class="download-btn" id="downloadBtn" data-token="<?= token ?>">
           <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M12 4V16M12 16L7 11M12 16L17 11" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
             <path d="M5 20H19" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
-          ダウンロード
-        </a>
+          <span id="downloadBtnLabel">ダウンロード</span>
+        </button>
+        <p class="msg-box error" id="downloadError" style="display:none;"></p>
 
       <? } else if (status === 'expired') { ?>
         <div class="icon-circle warn">
@@ -134,5 +96,85 @@
       <? } ?>
     </div>
   </div>
+
+  <script>
+    (function () {
+      var btn = document.getElementById('downloadBtn');
+      if (!btn) { return; } // status !== 'ok' のときはボタン自体が存在しない
+
+      var label = document.getElementById('downloadBtnLabel');
+      var errorBox = document.getElementById('downloadError');
+      var defaultLabel = label.textContent;
+      var token = btn.getAttribute('data-token');
+      var busy = false;
+
+      function setBusy(isBusy, text) {
+        busy = isBusy;
+        btn.setAttribute('aria-disabled', isBusy ? 'true' : 'false');
+        btn.style.opacity = isBusy ? '0.7' : '';
+        label.textContent = text;
+      }
+
+      function showError(message) {
+        errorBox.textContent = message;
+        errorBox.style.display = 'block';
+      }
+
+      // base64 → Blob化して即ダウンロード発火。元のMIMEタイプに関わらず常に
+      // application/octet-stream として Blob 化する(HTML/SVG/JS等のアクティブ
+      // コンテンツがブラウザ上で実行・レンダリングされるのを防ぐため)。
+      function triggerDownload(base64Data, fileName) {
+        var byteChars = atob(base64Data);
+        var byteNumbers = new Array(byteChars.length);
+        for (var i = 0; i < byteChars.length; i++) {
+          byteNumbers[i] = byteChars.charCodeAt(i);
+        }
+        var byteArray = new Uint8Array(byteNumbers);
+        var blob = new Blob([byteArray], { type: 'application/octet-stream' });
+        var url = URL.createObjectURL(blob);
+
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
+      }
+
+      btn.addEventListener('click', function () {
+        if (busy) { return; }
+
+        errorBox.style.display = 'none';
+        setBusy(true, '読み込み中…');
+
+        google.script.run
+          .withSuccessHandler(function (res) {
+            setBusy(false, defaultLabel);
+            if (!res || !res.success) {
+              var status = res && res.status;
+              if (status === 'expired') {
+                showError('このリンクは有効期限が切れています。');
+              } else if (status === 'notfound') {
+                showError('ファイルが見つかりませんでした。リンクが正しいかご確認ください。');
+              } else {
+                showError('ダウンロードに失敗しました。しばらくしてから再度お試しください。');
+              }
+              return;
+            }
+            try {
+              triggerDownload(res.base64Data, res.fileName);
+            } catch (err) {
+              showError('ダウンロードに失敗しました。しばらくしてから再度お試しください。');
+            }
+          })
+          .withFailureHandler(function () {
+            setBusy(false, defaultLabel);
+            showError('通信エラーが発生しました。しばらくしてから再度お試しください。');
+          })
+          .getFileForDownload(token);
+      });
+    })();
+  </script>
 </body>
 </html>

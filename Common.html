@@ -1,0 +1,65 @@
+<base target="_top">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!--
+  Download.html のURLにはダウンロード用トークン(?token=...)が含まれる。
+  現状は外部リソースの読み込み等は行っていないためRefererを通じたトークン漏洩の
+  実害はないが、将来的に外部フォント・アナリティクス等を追加した際に
+  Refererヘッダー経由でトークンが外部ドメインへ漏れることを予防的に防ぐため、
+  全ページ共通でReferrerを送出しないポリシーを明示しておく。
+-->
+<meta name="referrer" content="no-referrer">
+<style>
+  :root {
+    --bg: #f1f2f5;
+    --card-bg: #ffffff;
+    --text-main: #20242c;
+    --text-sub: #6b7280;
+    --border: #e2e4e9;
+    --accent: #4a5578;
+    --accent-dark: #383f5a;
+    --surface: #f6f7f9;
+    --surface-hover: #eceef2;
+    --success-bg: #eef6f0;
+    --success-border: #cfe3d3;
+    --success-text: #2f6b45;
+    --error-bg: #fbeeee;
+    --error-border: #f0cbcb;
+    --error-text: #a13a3a;
+    --warning-bg: #fbf3e6;
+    --warning-border: #eeddb3;
+    --warning-text: #8a6116;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Kaku Gothic ProN',
+                 'Segoe UI', 'Yu Gothic', sans-serif;
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: var(--bg);
+    color: var(--text-main);
+  }
+  .wrap { width: 100%; }
+  .card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: 0 1px 2px rgba(16,24,40,0.04);
+  }
+  .hint { font-size: 13px; color: var(--text-sub); line-height: 1.6; }
+
+  /* インライン通知(警告・エラー)の共通スタイル。marginは利用箇所ごとに上書きする。 */
+  .msg-box {
+    padding: 10px 12px;
+    border-radius: 8px;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .msg-box.warn { background: var(--warning-bg); border: 1px solid var(--warning-border); color: var(--warning-text); }
+  .msg-box.error { background: var(--error-bg); border: 1px solid var(--error-border); color: var(--error-text); }
+</style>
